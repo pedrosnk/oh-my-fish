@@ -1,24 +1,3 @@
-# SYNOPSIS
-#   Initialize Oh My Fish.
-#
-# OVERVIEW
-#   + Source $OMF_CONFIG/before.init.fish
-#
-#   + Autoload Oh My Fish packages, themes and config path
-#   + For each <pkg> inside {$OMF_PATH,$OMF_CONFIG}
-#     + Autoload <pkg> directory
-#     + Source <pkg>.fish
-#     + Emit init_<pkg> event
-#
-#   + Autoload {$OMF_PATH,$OMF_CONFIG}/functions
-#   + Source $OMF_CONFIG/init.fish
-#
-# ENV
-#   OMF_PATH      ~/.local/share/omf by default.
-#   OMF_IGNORE    List of packages to ignore.
-#   OMF_CONFIG    ~/.config/omf by default.
-#   OMF_VERSION   Oh My Fish! version
-
 # Set OMF_CONFIG if not set.
 if not set -q OMF_CONFIG
   set -q XDG_CONFIG_HOME; or set -l XDG_CONFIG_HOME "$HOME/.config"
@@ -28,26 +7,39 @@ end
 # Source custom before.init.fish file
 source $OMF_CONFIG/before.init.fish ^/dev/null
 
-# Save the head of function path and autoload core functions
-set -l user_function_path $fish_function_path[1]
-set fish_function_path[1] $OMF_PATH/lib
+# Autoload framework structure, keeping user function path as first
+set fish_function_path $fish_function_path[1] \
+                       $OMF_CONFIG/functions  \
+                       $OMF_PATH/{lib,git}    \
+                       $fish_function_path[2..-1]
 
-# Autoload util functions
-autoload $OMF_PATH/lib/git
+# Read current theme
+read -l theme < $OMF_CONFIG/theme
 
-for path in {$OMF_PATH,$OMF_CONFIG}/pkg/*
-  set -l name (basename $path)
+# Prepare Oh My Fish paths
+set -l omf_function_path {$OMF_CONFIG,$OMF_PATH}/{themes*/$theme/{,functions},pkg/*/{,functions}}
+set -l omf_complete_path {$OMF_CONFIG,$OMF_PATH}/{themes*/$theme/completions,pkg/*/completions}
 
-  contains -- $name $OMF_IGNORE; and continue
-  require $name
+# Autoload functions
+set fish_function_path $fish_function_path[1] \
+                       $omf_function_path     \
+                       $fish_function_path[2..-1]
+
+# Autoload completions
+set fish_complete_path $fish_complete_path[1] \
+                       $omf_complete_path     \
+                       $fish_complete_path[2..-1]
+
+for init in {$OMF_CONFIG,$OMF_PATH}/{pkg/*/init.fish}
+  begin
+    source $init >/dev/null ^&1
+
+    set -l IFS '/'
+    echo $init | read -la components
+
+    emit init_$components[-2] (printf '/%s' $components[1..-2])
+  end
 end
-
-# Autoload theme
-autoload {$OMF_PATH,$OMF_CONFIG}/themes/(cat $OMF_CONFIG/theme)
-
-# Autoload custom functions
-autoload $OMF_CONFIG/functions
-autoload $user_function_path
 
 # Source custom init.fish file
 source $OMF_CONFIG/init.fish ^/dev/null
